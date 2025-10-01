@@ -53,7 +53,7 @@ const NoteCard = ({ note, onClick, onPin, onDelete, isSelected }) => {
       onClick={() => onClick && onClick(note)}
       className={`bg-white rounded-lg border-2 p-3 sm:p-4 cursor-pointer transition-all hover:shadow-md ${
         isSelected
-          ? 'border-blue-500 shadow-lg'
+          ? 'border-purple-500 shadow-lg'
           : note.isPinned
           ? 'border-yellow-300'
           : 'border-gray-200'
