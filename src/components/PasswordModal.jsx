@@ -104,7 +104,7 @@ const PasswordModal = ({ isOpen, onClose, onSubmit, mode = 'lock', title }) => {
           {/* Info Message */}
           {mode === 'lock' && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-600">
-              💡 Make sure to remember your password. There's no way to recover it if forgotten.
+               Make sure to remember your password. There's no way to recover it if forgotten.
             </div>
           )}
 
