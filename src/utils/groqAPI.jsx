@@ -5,6 +5,9 @@ const GROQ_API_URL = import.meta.env.VITE_API_URL;
 console.log('API Key:', GROQ_API_KEY);
 console.log('API URL:', GROQ_API_URL);
 
+console.log("API Key:", GROQ_API_KEY ? "Loaded " : "Missing ");
+console.log("API URL:", GROQ_API_URL || "Undefined ");
+
 // remove HTML tags and extra spaces
 export const stripHtml = (html) =>
   html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
