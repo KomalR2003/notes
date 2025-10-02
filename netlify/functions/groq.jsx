@@ -1,11 +1,11 @@
 export async function handler(event) {
   try {
-    const GROQ_API_KEY = process.env.VITE_GROQ_API_KEY;
+    const GROQ_API_KEY = process.env.VITE_GROQ_API_KEY; // ✅ keep using VITE_
     if (!GROQ_API_KEY) {
       return { statusCode: 500, body: "Missing GROQ_API_KEY" };
     }
 
-    const { prompt } = JSON.parse(event.body);
+    const { prompt, task } = JSON.parse(event.body);
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -16,10 +16,13 @@ export async function handler(event) {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: "You are a helpful AI assistant." },
+          {
+            role: "system",
+            content: `You are an AI that helps with different tasks: summarization, glossary extraction, insights, grammar checking, translation. Task: ${task}. Return JSON only.`,
+          },
           { role: "user", content: prompt },
         ],
-        max_tokens: 500,
+        max_tokens: 800,
         temperature: 0.5,
       }),
     });
@@ -28,7 +31,9 @@ export async function handler(event) {
 
     return {
       statusCode: 200,
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        content: data.choices?.[0]?.message?.content || "",
+      }),
     };
   } catch (error) {
     return {
