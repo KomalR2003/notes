@@ -1,4 +1,3 @@
-// App.jsx - Version History Removed
 import React, { useState, useEffect } from 'react';
 import { Plus, Lock, Unlock, X, Menu } from 'lucide-react';
 import TextEditor from './components/TextEditor';
@@ -8,6 +7,7 @@ import PasswordModal from './components/PasswordModal';
 import AIFeatures from './components/AIFeatures';
 import { useNotes } from './hooks/useNotes';
 import { encryptNote, decryptNote } from './utils/encryption';
+import { summarizeNote, suggestTags } from './utils/groqAPI';
 
 function App() {
   const {
@@ -28,6 +28,7 @@ function App() {
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, mode: 'lock', noteId: null });
   const [unlockedNotes, setUnlockedNotes] = useState(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // Select first note on initial load
   useEffect(() => {
@@ -69,54 +70,43 @@ function App() {
 
   const handleLockNote = () => {
     if (selectedNote) {
-      if (selectedNote.isLocked) {
-        setPasswordModal({ isOpen: true, mode: 'unlock', noteId: selectedNote.id });
-      } else {
-        setPasswordModal({ isOpen: true, mode: 'lock', noteId: selectedNote.id });
-      }
+      setPasswordModal({
+        isOpen: true,
+        mode: selectedNote.isLocked ? 'unlock' : 'lock',
+        noteId: selectedNote.id
+      });
     }
   };
 
   const handlePasswordSubmit = (password) => {
     const noteId = passwordModal.noteId;
     const note = notes.find(n => n.id === noteId);
-    
     if (!note) return;
 
     if (passwordModal.mode === 'lock') {
       const encrypted = encryptNote(note.content, password);
       setNoteLock(noteId, true, encrypted);
-      if (selectedNote?.id === noteId) {
-        setSelectedNote({ ...note, isLocked: true, content: encrypted });
-      }
+      if (selectedNote?.id === noteId) setSelectedNote({ ...note, isLocked: true, content: encrypted });
     } else {
       const decrypted = decryptNote(note.content, password);
       if (decrypted) {
         setUnlockedNotes(prev => new Set([...prev, noteId]));
         setSelectedNote({ ...note, content: decrypted });
-      } else {
-        alert('Incorrect password!');
-      }
+      } else alert('Incorrect password!');
     }
   };
 
   const handleAddTags = (tags) => {
     if (selectedNote) {
       addTags(selectedNote.id, tags);
-      setSelectedNote(prev => ({
-        ...prev,
-        tags: [...new Set([...(prev.tags || []), ...tags])]
-      }));
+      setSelectedNote(prev => ({ ...prev, tags: [...new Set([...(prev.tags || []), ...tags])] }));
     }
   };
 
   const handleRemoveTag = (tag) => {
     if (selectedNote) {
       removeTag(selectedNote.id, tag);
-      setSelectedNote(prev => ({
-        ...prev,
-        tags: prev.tags.filter(t => t !== tag)
-      }));
+      setSelectedNote(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
     }
   };
 
@@ -127,26 +117,54 @@ function App() {
     }
   };
 
+  // ✅ AI helpers
+  const handleSummarize = async () => {
+    if (!selectedNote) return;
+    setAiLoading(true);
+    try {
+      const summary = await summarizeNote(selectedNote.content);
+      alert(`Summary:\n${summary}`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to summarize note");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleSuggestTags = async () => {
+    if (!selectedNote) return;
+    setAiLoading(true);
+    try {
+      const tags = await suggestTags(selectedNote.content);
+      handleAddTags(tags);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to suggest tags");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const isNoteLocked = selectedNote?.isLocked && !unlockedNotes.has(selectedNote.id);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
-      <header className="bg-gradient-to-r  bg-purple-700 text-white shadow-lg">
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
-              </button>
-              <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-1 sm:gap-2">
-                 <span className="hidden xs:inline">Shareable</span> Notes
-              </h1>
-            </div>
+      <header className="bg-gradient-to-r bg-purple-700 text-white shadow-lg">
+        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-1 sm:gap-2">
+              <span className="hidden xs:inline">Shareable</span> Notes
+            </h1>
+          </div>
+          <button
               onClick={handleCreateNote}
               className="flex items-center gap-1 sm:gap-2 bg-white text-purple-600 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-lg hover:bg-gray-100 transition-colors font-medium text-sm sm:text-base"
             >
@@ -154,28 +172,15 @@ function App() {
               <span className="hidden sm:inline">New Note</span>
               <span className="sm:hidden">New</span>
             </button>
-          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar Overlay for Mobile */}
-        {sidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
+        {sidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-        {/* Sidebar - Notes List */}
-        <aside className={`
-          fixed lg:relative inset-y-0 left-0 z-30
-          w-64 sm:w-72 md:w-80 lg:w-80 xl:w-96
-          bg-white border-r border-gray-300 flex flex-col
-          transform transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        `}>
+        {/* Sidebar */}
+        <aside className={`fixed lg:relative inset-y-0 left-0 z-30 w-64 sm:w-72 md:w-80 lg:w-80 xl:w-96 bg-white border-r border-gray-300 flex flex-col transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="p-3 sm:p-4 border-b border-gray-200">
             <SearchBar onSearch={setSearchTerm} />
           </div>
@@ -191,12 +196,11 @@ function App() {
           </div>
         </aside>
 
-        {/* Main Editor Area */}
+        {/* Editor */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {selectedNote ? (
             <>
-              {/* Note Header */}
-              <div className="bg-white border-b border-gray-300 p-3 sm:p-4">
+              <div className="bg-white border-b border-gray-300 p-3 sm:p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <input
                     type="text"
@@ -208,34 +212,19 @@ function App() {
                   />
                   <button
                     onClick={handleLockNote}
-                    className={`p-1.5 sm:p-2 rounded-lg transition-colors ${
-                      selectedNote.isLocked
-                        ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`p-1.5 sm:p-2 rounded-lg transition-colors ${selectedNote.isLocked ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     title={selectedNote.isLocked ? 'Unlock note' : 'Lock note'}
                   >
-                    {selectedNote.isLocked ? (
-                      <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
-                    ) : (
-                      <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />
-                    )}
+                    {selectedNote.isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />}
                   </button>
                 </div>
 
-                {/* Tags */}
                 {selectedNote.tags && selectedNote.tags.length > 0 && !isNoteLocked && (
                   <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
                     {selectedNote.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="flex items-center gap-1 bg-blue-100 text-blue-700 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm"
-                      >
+                      <span key={index} className="flex items-center gap-1 bg-blue-100 text-blue-700 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm">
                         {tag}
-                        <button
-                          onClick={() => handleRemoveTag(tag)}
-                          className="hover:bg-blue-200 rounded-full p-0.5"
-                        >
+                        <button onClick={() => handleRemoveTag(tag)} className="hover:bg-blue-200 rounded-full p-0.5">
                           <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                         </button>
                       </span>
@@ -244,23 +233,13 @@ function App() {
                 )}
               </div>
 
-              {/* Editor */}
               <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-                <TextEditor
-                  content={selectedNote.content}
-                  onChange={handleContentChange}
-                  isLocked={isNoteLocked}
-                />
+                <TextEditor content={selectedNote.content} onChange={handleContentChange} isLocked={isNoteLocked} />
               </div>
 
-              {/* AI Features */}
               {!isNoteLocked && (
                 <div className="p-3 sm:p-4 border-t border-gray-300 bg-gray-50 overflow-y-auto max-h-72 sm:max-h-80 md:max-h-96">
-                  <AIFeatures
-                    content={selectedNote.content}
-                    onAddTags={handleAddTags}
-                    onApplyCorrection={handleApplyCorrection}
-                  />
+                  <AIFeatures content={selectedNote.content} onAddTags={handleAddTags} onApplyCorrection={handleApplyCorrection} />
                 </div>
               )}
             </>
