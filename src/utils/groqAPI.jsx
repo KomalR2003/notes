@@ -1,34 +1,32 @@
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_API_URL = import.meta.env.VITE_API_URL;
+// src/utils/groqAPI.jsx - FIXED VERSION
 
+// Remove these - no longer needed in frontend!
+// const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+// const GROQ_API_URL = import.meta.env.VITE_API_URL;
 
-console.log('API Key:', GROQ_API_KEY);
-console.log('API URL:', GROQ_API_URL);
-
-// remove HTML tags and extra spaces
+// Remove HTML tags and extra spaces
 export const stripHtml = (html) =>
   html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-// generic API call
+// Generic API call - NOW GOES THROUGH NETLIFY FUNCTION
 export const callGroqAPI = async (prompt, maxTokens = 500, temperature = 0.5) => {
-  const response = await fetch(`${GROQ_API_URL}/chat/completions`, {
+  // Call YOUR Netlify function instead of Groq directly
+  const response = await fetch("/.netlify/functions/groq", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: maxTokens,
+      prompt,
+      maxTokens,
       temperature,
     }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Groq API Error: ${response.status}`);
-  };
+    throw new Error(errorData.error || `API Error: ${response.status}`);
+  }
 
   const data = await response.json();
   return data.choices?.[0]?.message?.content?.trim() || "";
@@ -48,13 +46,12 @@ export const suggestTags = async (content) => {
   const text = stripHtml(content);
   if (text.length < 20) throw new Error("Content too short for tag suggestions");
 
-
   const prompt = `Analyze this note and suggest 3-5 relevant tags. Return ONLY the tags as a comma-separated list.\n\nNote content:\n${text.slice(0, 2000)}\n\nTags:`;
   const response = await callGroqAPI(prompt, 100, 0.4);
   return response.split(",").map(t => t.trim()).filter(t => t.length > 0).slice(0, 5);
 };
 
-// 3️⃣ Extract Glossary Terms
+// Extract Glossary Terms
 export const extractGlossaryTerms = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for glossary extraction");
@@ -74,7 +71,7 @@ export const extractGlossaryTerms = async (content) => {
   }
 };
 
-// 4️⃣ Grammar Check
+// Grammar Check
 export const checkGrammar = async (content) => {
   const text = stripHtml(content);
   if (text.length < 10) throw new Error("Content too short for grammar check");
@@ -94,7 +91,7 @@ export const checkGrammar = async (content) => {
   }
 };
 
-// 5️⃣ Translate Note
+// Translate Note
 export const translateNote = async (content, targetLanguage) => {
   const text = stripHtml(content);
   if (text.length < 5) throw new Error("Content too short to translate");
@@ -103,7 +100,7 @@ export const translateNote = async (content, targetLanguage) => {
   return await callGroqAPI(prompt, 1200, 0.3);
 };
 
-// 6️⃣ Generate Insights
+// Generate Insights
 export const generateInsights = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for insights");
@@ -125,4 +122,4 @@ export const generateInsights = async (content) => {
     console.error("Insights generation error:", error);
     return { sentiment: "neutral", keyPoints: [], recommendations: [] };
   }
-};
+}
