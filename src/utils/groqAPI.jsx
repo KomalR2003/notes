@@ -1,64 +1,98 @@
+// Works in BOTH local development and Netlify production
+const IS_PRODUCTION = window.location.hostname !== 'localhost';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_API_URL = import.meta.env.VITE_API_URL;
+const GROQ_API_URL = import.meta.env.VITE_API_URL || "https://api.groq.com/openai/v1";
 
-// Debugging logs (remove in production)
-console.log("API Key:", GROQ_API_KEY ? "Loaded " : "Missing");
-console.log("API URL:", GROQ_API_URL || " Undefined");
-
-//  Utility: Remove HTML tags and extra spaces
+// Utility: Remove HTML tags and extra spaces
 export const stripHtml = (html) =>
   html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-//  Generic API caller
-export const callGroqAPI = async (prompt, maxTokens = 500, temperature = 0.5) => {
+// Generic API caller - Uses Netlify function in production, direct API in development
+export const callGroqAPI = async (prompt, task = "general", maxTokens = 800) => {
   try {
-    const response = await fetch(`${GROQ_API_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant", 
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: maxTokens,
-        temperature,
-      }),
-    });
+    let response;
+
+    if (IS_PRODUCTION) {
+      // PRODUCTION: Use Netlify function
+      console.log("Using Netlify function (production)");
+      response = await fetch("/.netlify/functions/groq", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          task
+        }),
+      });
+    } else {
+      // LOCAL DEVELOPMENT: Call Groq API directly
+      console.log("Using direct API (local development)");
+      if (!GROQ_API_KEY) {
+        throw new Error("Missing VITE_GROQ_API_KEY in .env file");
+      }
+
+      response = await fetch(`${GROQ_API_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI that helps with different tasks: summarization, glossary extraction, insights, grammar checking, translation. Task: ${task}. Return JSON only when requested.`,
+            },
+            { role: "user", content: prompt },
+          ],
+          max_tokens: maxTokens,
+          temperature: 0.5,
+        }),
+      });
+    }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Groq API Error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+      console.error("API error:", errorData);
+      throw new Error(errorData.error || `API Error: ${response.status}`);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "";
+    
+    // Handle different response formats
+    if (IS_PRODUCTION) {
+      return data.content || "";
+    } else {
+      return data.choices?.[0]?.message?.content?.trim() || "";
+    }
   } catch (err) {
     console.error("callGroqAPI error:", err);
     throw err;
   }
 };
 
-// 1️ Summarize a Note
+// 1️⃣ Summarize a Note
 export const summarizeNote = async (content) => {
   const text = stripHtml(content);
   if (text.length < 20) throw new Error("Content too short to summarize");
 
   const prompt = `Summarize the following note in 1-2 sentences:\n\n${text.slice(0, 3000)}\n\nSummary:`;
-  return await callGroqAPI(prompt, 150, 0.3);
+  return await callGroqAPI(prompt, "summarization", 150);
 };
 
-// 2️ Suggest Tags
+// 2️⃣ Suggest Tags
 export const suggestTags = async (content) => {
   const text = stripHtml(content);
   if (text.length < 20) throw new Error("Content too short for tag suggestions");
 
   const prompt = `Analyze this note and suggest 3-5 relevant tags. Return ONLY the tags as a comma-separated list.\n\nNote:\n${text.slice(0, 2000)}\n\nTags:`;
-  const response = await callGroqAPI(prompt, 100, 0.4);
+  const response = await callGroqAPI(prompt, "tag_suggestion", 100);
   return response.split(",").map(t => t.trim()).filter(Boolean).slice(0, 5);
 };
 
-// 3️ Extract Glossary Terms
+// 3️⃣ Extract Glossary Terms
 export const extractGlossaryTerms = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for glossary extraction");
@@ -73,9 +107,14 @@ ${text.slice(0, 2000)}
 JSON:`;
 
   try {
-    const response = await callGroqAPI(prompt, 800, 0.3);
+    const response = await callGroqAPI(prompt, "glossary_extraction", 800);
+    console.log("Glossary raw response:", response);
+    
     const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("Invalid response format");
+    if (!jsonMatch) {
+      console.error("No JSON array found in response");
+      return [];
+    }
 
     const terms = JSON.parse(jsonMatch[0]);
     return terms.filter(item => item.term && item.definition).slice(0, 8);
@@ -85,7 +124,7 @@ JSON:`;
   }
 };
 
-// 4️ Grammar Check
+// 4️⃣ Grammar Check
 export const checkGrammar = async (content) => {
   const text = stripHtml(content);
   if (text.length < 10) throw new Error("Content too short for grammar check");
@@ -100,7 +139,7 @@ ${text.slice(0, 1500)}
 JSON:`;
 
   try {
-    const response = await callGroqAPI(prompt, 600, 0.2);
+    const response = await callGroqAPI(prompt, "grammar_check", 600);
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
 
@@ -112,7 +151,7 @@ JSON:`;
   }
 };
 
-// 5️ Translate Note
+// 5️⃣ Translate Note
 export const translateNote = async (content, targetLanguage) => {
   const text = stripHtml(content);
   if (text.length < 5) throw new Error("Content too short to translate");
@@ -125,10 +164,10 @@ ${text.slice(0, 2500)}
 
 Translation:`;
 
-  return await callGroqAPI(prompt, 1200, 0.3);
+  return await callGroqAPI(prompt, "translation", 1200);
 };
 
-// 6️ Generate Insights
+// 6️⃣ Generate Insights
 export const generateInsights = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for insights");
@@ -151,9 +190,14 @@ ${text.slice(0, 2000)}
 JSON:`;
 
   try {
-    const response = await callGroqAPI(prompt, 500, 0.4);
+    const response = await callGroqAPI(prompt, "insights", 500);
+    console.log("Insights raw response:", response);
+    
     const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Invalid response format");
+    if (!jsonMatch) {
+      console.error("No JSON object found in response");
+      return { sentiment: "neutral", keyPoints: [], recommendations: [] };
+    }
 
     const insights = JSON.parse(jsonMatch[0]);
     return {
@@ -165,4 +209,4 @@ JSON:`;
     console.error("Insights generation error:", err);
     return { sentiment: "neutral", keyPoints: [], recommendations: [] };
   }
-};
+}
