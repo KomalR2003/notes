@@ -1,72 +1,50 @@
-// Works in BOTH local development and Netlify production
-const IS_PRODUCTION = window.location.hostname !== 'localhost';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_API_URL = import.meta.env.VITE_API_URL || "https://api.groq.com/openai/v1";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 // Utility: Remove HTML tags and extra spaces
 export const stripHtml = (html) =>
   html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-// Generic API caller - Uses Netlify function in production, direct API in development
+// Generic API caller - Direct API call from frontend
 export const callGroqAPI = async (prompt, task = "general", maxTokens = 800) => {
   try {
-    let response;
-
-    if (IS_PRODUCTION) {
-      // PRODUCTION: Use Netlify function
-      console.log("Using Netlify function (production)");
-      response = await fetch("/.netlify/functions/groq", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt,
-          task
-        }),
-      });
-    } else {
-      // LOCAL DEVELOPMENT: Call Groq API directly
-      console.log("Using direct API (local development)");
-      if (!GROQ_API_KEY) {
-        throw new Error("Missing VITE_GROQ_API_KEY in .env file");
-      }
-
-      response = await fetch(`${GROQ_API_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            {
-              role: "system",
-              content: `You are an AI that helps with different tasks: summarization, glossary extraction, insights, grammar checking, translation. Task: ${task}. Return JSON only when requested.`,
-            },
-            { role: "user", content: prompt },
-          ],
-          max_tokens: maxTokens,
-          temperature: 0.5,
-        }),
-      });
+    if (!GROQ_API_KEY) {
+      throw new Error("Missing VITE_GROQ_API_KEY. Please add it to your environment variables.");
     }
+
+    console.log(`Calling Groq API for task: ${task}`);
+
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: `You are an AI that helps with different tasks: summarization, glossary extraction, insights, grammar checking, translation. Task: ${task}. Return JSON only when requested.`,
+          },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.5,
+      }),
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-      console.error("API error:", errorData);
-      throw new Error(errorData.error || `API Error: ${response.status}`);
+      console.error("Groq API error:", errorData);
+      throw new Error(errorData.error?.message || errorData.error || `API Error: ${response.status}`);
     }
 
     const data = await response.json();
+    const content = data.choices?.[0]?.message?.content?.trim() || "";
     
-    // Handle different response formats
-    if (IS_PRODUCTION) {
-      return data.content || "";
-    } else {
-      return data.choices?.[0]?.message?.content?.trim() || "";
-    }
+    console.log("API call successful");
+    return content;
   } catch (err) {
     console.error("callGroqAPI error:", err);
     throw err;
