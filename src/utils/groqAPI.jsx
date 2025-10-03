@@ -51,7 +51,7 @@ export const callGroqAPI = async (prompt, task = "general", maxTokens = 800) => 
   }
 };
 
-// 1️⃣ Summarize a Note
+// 1️ Summarize a Note
 export const summarizeNote = async (content) => {
   const text = stripHtml(content);
   if (text.length < 20) throw new Error("Content too short to summarize");
@@ -60,7 +60,7 @@ export const summarizeNote = async (content) => {
   return await callGroqAPI(prompt, "summarization", 150);
 };
 
-// 2️⃣ Suggest Tags
+// 2️ Suggest Tags
 export const suggestTags = async (content) => {
   const text = stripHtml(content);
   if (text.length < 20) throw new Error("Content too short for tag suggestions");
@@ -70,7 +70,7 @@ export const suggestTags = async (content) => {
   return response.split(",").map(t => t.trim()).filter(Boolean).slice(0, 5);
 };
 
-// 3️⃣ Extract Glossary Terms
+// 3️ Extract Glossary Terms
 export const extractGlossaryTerms = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for glossary extraction");
@@ -102,7 +102,7 @@ JSON:`;
   }
 };
 
-// 4️⃣ Grammar Check
+// 4️ Grammar Check
 export const checkGrammar = async (content) => {
   const text = stripHtml(content);
   if (text.length < 10) throw new Error("Content too short for grammar check");
@@ -129,7 +129,7 @@ JSON:`;
   }
 };
 
-// 5️⃣ Translate Note
+// 5️ Translate Note
 export const translateNote = async (content, targetLanguage) => {
   const text = stripHtml(content);
   if (text.length < 5) throw new Error("Content too short to translate");
@@ -145,7 +145,7 @@ Translation:`;
   return await callGroqAPI(prompt, "translation", 1200);
 };
 
-// 6️⃣ Generate Insights
+// 6️ Generate Insights
 export const generateInsights = async (content) => {
   const text = stripHtml(content);
   if (text.length < 50) throw new Error("Content too short for insights");

@@ -1,11 +1,8 @@
-// components/GlossaryHighlight.jsx
+
 import React, { useState } from 'react';
 import { Lightbulb, X } from 'lucide-react';
 import { useAI } from '../hooks/useAI';
 
-/**
- * Glossary highlighting component with hover tooltips
- */
 const GlossaryHighlight = ({ content, onHighlight }) => {
   const [glossaryTerms, setGlossaryTerms] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
